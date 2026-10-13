@@ -1,0 +1,140 @@
+/home/vlad/miniconda3/envs/bioml/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+Seed set to 0
+/home/vlad/miniconda3/envs/bioml/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+/home/vlad/miniconda3/envs/bioml/lib/python3.11/site-packages/lightning/pytorch/trainer/configuration_validator.py:70: You defined a `validation_step` but have no `val_dataloader`. Skipping val loop.
+You are using a CUDA device ('NVIDIA GeForce RTX 4050 Laptop GPU') that has Tensor Cores. To properly utilize them, you should set `torch.set_float32_matmul_precision('medium' | 'high')` which will trade-off precision for performance. For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+============================================================
+STEP 1: Load healthy data
+============================================================
+128,171 cells × 7,958 genes
+group
+census_healthy    89253
+lupus_healthy     38918
+Name: count, dtype: int64
+
+============================================================
+STEP 2: Setup scVI
+============================================================
+
+============================================================
+STEP 3: SKIP warmup, loading from runs/warmup_clean
+============================================================
+Warmup loaded.
+
+============================================================
+STEP 4: Build BankData (A/B split)
+============================================================
+MMD types (19)
+bank healthy_train.h5ad: 128171 cells x 7958 genes, A=737 B=186 donors, 2068 (type, donor) pairs, 19 eligible cell types
+batch codes loader == scVI: OK
+
+A donors: 737, B donors: 186, eligible types: 19
+
+============================================================
+STEP 5: Compute bandwidths
+============================================================
+Bandwidths for 19 cell types
+MMDPlan: 19 cell types
+
+============================================================
+STEP 6: Create MMDTrainingPlan
+============================================================
+Plan: 193 batches/epoch, lambda=10.0, kl_weight=0.03750000149011612
+
+============================================================
+STEP 7: Callbacks
+============================================================
+EarlyStopping: OFF
+
+============================================================
+STEP 8: MMD phase (20 epochs)
+============================================================
+┏━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━┓
+┃   ┃ Name            ┃ Type                ┃ Params ┃ Mode  ┃ FLOPs ┃
+┡━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━┩
+│ 0 │ module          │ VAE                 │  5.2 M │ eval  │     0 │
+│ 1 │ elbo_train      │ CompositionalMetric │      0 │ train │     0 │
+│ 2 │ rec_loss_train  │ ElboMetric          │      0 │ train │     0 │
+│ 3 │ kl_local_train  │ ElboMetric          │      0 │ train │     0 │
+│ 4 │ kl_global_train │ ElboMetric          │      0 │ train │     0 │
+│ 5 │ elbo_val        │ CompositionalMetric │      0 │ train │     0 │
+│ 6 │ rec_loss_val    │ ElboMetric          │      0 │ train │     0 │
+│ 7 │ kl_local_val    │ ElboMetric          │      0 │ train │     0 │
+│ 8 │ kl_global_val   │ ElboMetric          │      0 │ train │     0 │
+└───┴─────────────────┴─────────────────────┴────────┴───────┴───────┘
+Trainable params: 5.2 M                                                                                       
+Non-trainable params: 0                                                                                       
+Total params: 5.2 M                                                                                           
+Total estimated model params size (MB): 20.712                                                                
+Modules in train mode: 12                                                                                     
+Modules in eval mode: 42                                                                                      
+Total FLOPs: 0                                                                                                
+/home/vlad/miniconda3/envs/bioml/lib/python3.11/site-packages/lightning/pytorch/loops/fit_loop.py:538: Found 42 module(s) in eval mode at the start of training. This may lead to unexpected behavior during training. If this is intentional, you can ignore this warning.
+Epoch 0, global step 193: 'mmd_ab' reached 0.00535 (best 0.00535), saving model to '/home/vlad/scGRIP/runs/mmd_clean_lambda10_v2/checkpoints/best-epoch=00-mmd_ab=0.0054.ckpt' as top 1
+Epoch 1, global step 386: 'mmd_ab' reached 0.00520 (best 0.00520), saving model to '/home/vlad/scGRIP/runs/mmd_clean_lambda10_v2/checkpoints/best-epoch=01-mmd_ab=0.0052.ckpt' as top 1
+Epoch 2, global step 579: 'mmd_ab' reached 0.00503 (best 0.00503), saving model to '/home/vlad/scGRIP/runs/mmd_clean_lambda10_v2/checkpoints/best-epoch=02-mmd_ab=0.0050.ckpt' as top 1
+Epoch 3, global step 772: 'mmd_ab' reached 0.00503 (best 0.00503), saving model to '/home/vlad/scGRIP/runs/mmd_clean_lambda10_v2/checkpoints/best-epoch=03-mmd_ab=0.0050.ckpt' as top 1
+Epoch 4, global step 965: 'mmd_ab' reached 0.00487 (best 0.00487), saving model to '/home/vlad/scGRIP/runs/mmd_clean_lambda10_v2/checkpoints/best-epoch=04-mmd_ab=0.0049.ckpt' as top 1
+Epoch 5, global step 1158: 'mmd_ab' was not in top 1
+Epoch 6, global step 1351: 'mmd_ab' reached 0.00463 (best 0.00463), saving model to '/home/vlad/scGRIP/runs/mmd_clean_lambda10_v2/checkpoints/best-epoch=06-mmd_ab=0.0046.ckpt' as top 1
+Epoch 7, global step 1544: 'mmd_ab' was not in top 1
+Epoch 8, global step 1737: 'mmd_ab' was not in top 1
+Epoch 9, global step 1930: 'mmd_ab' was not in top 1
+Epoch 10, global step 2123: 'mmd_ab' was not in top 1
+Epoch 11, global step 2316: 'mmd_ab' was not in top 1
+Epoch 12, global step 2509: 'mmd_ab' was not in top 1
+Epoch 13, global step 2702: 'mmd_ab' was not in top 1
+Epoch 14, global step 2895: 'mmd_ab' was not in top 1
+Epoch 15, global step 3088: 'mmd_ab' was not in top 1
+Epoch 16, global step 3281: 'mmd_ab' was not in top 1
+Epoch 17, global step 3474: 'mmd_ab' was not in top 1
+Epoch 18, global step 3667: 'mmd_ab' was not in top 1
+Epoch 19, global step 3860: 'mmd_ab' was not in top 1
+`Trainer.fit` stopped: `max_epochs=20` reached.
+
+[mmd_ab] epoch=0 avg=0.0054 types=19 lambda=10.00
+
+[mmd_ab] epoch=1 avg=0.0052 types=19 lambda=10.00
+
+[mmd_ab] epoch=2 avg=0.0050 types=19 lambda=10.00
+
+[mmd_ab] epoch=3 avg=0.0050 types=19 lambda=10.00
+
+[mmd_ab] epoch=4 avg=0.0049 types=19 lambda=10.00
+
+[mmd_ab] epoch=5 avg=0.0049 types=19 lambda=10.00
+
+[mmd_ab] epoch=6 avg=0.0046 types=19 lambda=10.00
+
+[mmd_ab] epoch=7 avg=0.0049 types=19 lambda=10.00
+
+[mmd_ab] epoch=8 avg=0.0048 types=19 lambda=10.00
+
+[mmd_ab] epoch=9 avg=0.0048 types=19 lambda=10.00
+
+[mmd_ab] epoch=10 avg=0.0048 types=19 lambda=10.00
+
+[mmd_ab] epoch=11 avg=0.0047 types=19 lambda=10.00
+
+[mmd_ab] epoch=12 avg=0.0047 types=19 lambda=10.00
+
+[mmd_ab] epoch=13 avg=0.0048 types=19 lambda=10.00
+
+[mmd_ab] epoch=14 avg=0.0047 types=19 lambda=10.00
+
+[mmd_ab] epoch=15 avg=0.0050 types=19 lambda=10.00
+
+[mmd_ab] epoch=16 avg=0.0048 types=19 lambda=10.00
+
+[mmd_ab] epoch=17 avg=0.0047 types=19 lambda=10.00
+
+[mmd_ab] epoch=18 avg=0.0047 types=19 lambda=10.00
+
+[mmd_ab] epoch=19 avg=0.0048 types=19 lambda=10.00
+Epoch 19/19 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 193/193 0:03:46 • 0:00:00 0.83it/s v_num: 0.000 train_loss: 1337.125 mmd_loss: 0.050 mmd_ab: 0.005

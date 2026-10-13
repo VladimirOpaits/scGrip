@@ -1,29 +1,457 @@
 \pdfminorversion=7
 \documentclass[12pt, a4paper]{article}
 
-\usepackage[T2A]{fontenc}
+\usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
-\usepackage[russian, english]{babel}
-\usepackage{multicol}
+\usepackage[english]{babel}
 \usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{amsmath,amssymb}
+\usepackage{cite}
 
-\title{Reference-Anchored Latent Space Projection for Isolating Disease Signals in Single-Cell Data}
+\title{Reference-Anchored Latent Space Projection for\\
+Isolating Disease Signals in Single-Cell Data}
 \author{Vladimir Opait \\
-\small \textit{Universitat de Valencia}}
+\small \textit{Universitat de Val\`encia}}
 \date{}
+
 \begin{document}
 
 \maketitle
 
 \begin{abstract}
-Integrating new single-cell cohorts into existing reference atlases is frequently confounded by technical batch effects, which can either obscure or mimic novel biological signals. To address this, we present scGRIP, a Conditional Variational Autoencoder (CVAE) framework designed to decouple batch variations from true disease signatures through reference-guided latent space adaptation. Our approach preserves the geometric and statistical properties of a well-characterized reference latent space using an Anchor Loss alongside standard ELBO optimization. To resolve new cohorts, we apply a Maximum Mean Discrepancy (MMD) objective exclusively to healthy control cells, forcing the alignment of the new healthy population with the reference healthy centroid. This targeted regularization restricts the model's degrees of freedom, compelling it to regress out the technical batch effect rather than biological variance. As a direct mathematical consequence, unaligned populations—cells that remain distant from the healthy centroid in the adapted latent space—naturally emerge as carriers of the disease signal. This geometry-preserving method enables the precise isolation of novel disease states and the robust identification of previously unknown biomarkers in newly integrated data.
+Reference mapping places a new single-cell cohort into the coordinate
+system of an existing atlas, but technical batch effects between the two
+can either obscure or mimic biological signal. Existing transfer-learning
+methods such as scArches extend a frozen reference with batch-specific
+adaptor weights and leave the reference latents unchanged; the adaptation
+of query cells is then governed only by the ELBO and by implicit
+regularization of the adaptor. We present scGRIP, which makes the
+geometric constraint on the query explicit. A single expression-facing
+linear layer of a frozen scVI encoder is updated under three disjoint
+objectives: a healthy ELBO on query cells, a functional anchor to the
+frozen reference geometry, and a stratified MMD term that aligns healthy
+query cells to an independent reference bank. Healthy donors are split
+into an MMD-seen group~A and a held-out group~B, and disease cells are
+never used in any gradient. scGRIP rests on the same assumptions about a
+correct latent space that underlie MapQC. This draft covers phase~I only;
+a disease-aware phase~II is a separate protocol.
 \end{abstract}
 
-\begin{figure}[htbp]
+
+\section{Introduction}
+\label{sec:intro}
+
+Large-scale reference atlases such as the Human Lung Cell Atlas and the
+CZ CELLxGENE Census now provide integrated representations of healthy
+cell states across tissues and individuals~\cite{cellxgene_census_2023}.
+A central use of these atlases is \emph{reference mapping}: projecting a
+new query cohort onto an existing reference to place it in a shared
+coordinate system for downstream comparison. New cohorts, however, are
+generated with different chemistry, depth, and study-specific handling,
+so a naive projection is confounded by technical batch effects that can
+either obscure or mimic biological signal.
+
+Existing transfer-learning methods such as scArches extend a frozen
+reference with new batch-specific adaptor weights and, by construction,
+leave the reference latent coordinates
+unchanged~\cite{scarches_2022}. What they do not provide is an explicit
+term that constrains the adapted query geometry to remain consistent
+with the reference, nor a mechanism that separates healthy alignment
+from disease-specific signal; adaptation is driven by the ELBO and by
+whatever regularization the adaptor imposes on itself.
+
+We present scGRIP, a reference-mapping method for a frozen scVI
+model~\cite{scvi_2018} that makes this constraint explicit. Rather than
+adding new adaptor capacity, scGRIP updates a single expression-facing
+linear layer under three disjoint objectives: a healthy ELBO on query
+cells, a functional anchor that ties the adapted latent back to the
+frozen reference geometry, and a stratified maximum mean discrepancy
+(MMD) term that aligns healthy query cells to an independent reference
+bank. Healthy donors are partitioned into an MMD-seen group~A and a
+held-out group~B, and disease cells are never used in any gradient.
+scGRIP is built on the same assumptions about a correct latent space
+that underlie MapQC~\cite{mapqc_2025}: that a healthy reference captures
+most healthy variation, and that disease is transcriptionally distinct
+from healthy. The method is illustrated in Figure~\ref{fig:architecture}.
+
+
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.8\textwidth]{images/scGRIP_phase1.pdf}
-    \caption{Архитектура метода с использованием LoRA и регуляризацией латентного пространства (MMD и Anchor Loss).}
-    \label{fig:my_scheme}
+    \caption{Overview of scGRIP phase~I. A frozen scVI encoder is adapted
+    only in the expression-facing first linear layer $W_0$. Healthy query
+    cells (A and B) contribute to the ELBO; healthy~A additionally supplies
+    the MMD source against an independent reference bank; replay cells
+    anchor the adapted latent to the frozen reference geometry. Disease
+    cells are encoded post-hoc and never enter any gradient term.}
+    \label{fig:architecture}
 \end{figure}
+
+\section{Results}
+\label{sec:results}
+
+All experiments reported here use phase~I training only: the adapter is
+fit on healthy query cells, and disease cells never enter any gradient
+term. Every run below was performed on the frozen 3000-gene Census base
+model with the same reference bank and the same GSE298578 query cohort
+(Section~\ref{sec:methods}).
+
+
+\subsection{Full combinatorial screen: 10/10 leave-two-donors-out pairs}
+
+The query cohort contains five healthy donors (HD\_1--HD\_5). To obtain a
+complete rather than sampled evaluation, we enumerated all
+\(\binom{5}{2}=10\) ways to hold out two donors as group~B (the MMD-unseen
+split) while the remaining three form group~A (the MMD source). Every pair
+was trained and evaluated independently. This is a full combinatorial
+screen, not a random subset of seeds.
+
+Across all 10 pairs, the core-stratum distance in the held-out B cells
+(CM~CD4 + EM~CD4) decreases monotonically with training
+(Table~\ref{tab:main-10pairs}). At epoch~10 the median improvement is
+\(-0.850\), with the full range \([-1.073, -0.703]\). All 10 of 10 pairs
+give a negative \(\Delta\), so the effect is not driven by a favorable
+split.
+
+\begin{table}[H]
+\centering
+\caption{Leave-two-donors-out screen over all \(\binom{5}{2}=10\) B-donor
+pairs. \(\lambda_{\text{anchor}}=100\), \(\lambda_{\text{MMD}}=500\).
+\(\Delta\) is the change in mean core-stratum distance of held-out B cells
+relative to the frozen base model (negative = closer to reference).
+Median and full range over the 10 pairs are shown.}
+\label{tab:main-10pairs}
+\begin{tabular}{lcc}
+\toprule
+Epoch & Median \(\Delta\) core\_B & Range across 10 pairs \\
+\midrule
+2  & \(-0.443\) & \([-0.482,\ -0.400]\) \\
+5  & \(-0.751\) & \([-0.885,\ -0.640]\) \\
+10 & \(\mathbf{-0.850}\) & \([-1.073,\ -0.703]\) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{MMD is the dominant driver of alignment}
+
+To separate the contribution of the MMD term from that of the healthy
+ELBO and the anchor, we re-ran the identical B-pairs with
+\(\lambda_{\text{MMD}}=0\). At epoch~10, the mean \(\Delta\) in held-out
+B drops from approximately \(-0.65\) with
+\(\lambda_{\text{MMD}}=500\) to approximately \(-0.15\) with
+\(\lambda_{\text{MMD}}=0\) (Table~\ref{tab:mmd-vs-nommd}). The anchor and
+ELBO alone therefore produce a small but nonzero effect; MMD supplies
+roughly a \(4\)--\(5\times\) larger improvement.
+
+We note a caveat on the current numbers. The core-stratum metric
+(\texttt{delta\_core\_B\_mean\_distance}) has so far been computed only
+for the \(\lambda_{\text{MMD}}=500\) runs. The
+\texttt{anchor100\_mmd0\_all\_pairs} runs currently report the aggregate
+stratified-B metric only; recomputing the core-stratum column is a
+one-command follow-up and the direction of the comparison is not expected
+to change.
+
+\begin{table}[H]
+\centering
+\caption{Effect of the MMD term at epoch~10 on identical B-donor pairs.
+Without MMD, anchor and ELBO alone yield a small effect; with MMD, the
+improvement is \(4\)--\(5\times\) larger.}
+\label{tab:mmd-vs-nommd}
+\begin{tabular}{lc}
+\toprule
+\(\lambda_{\text{MMD}}\) & Mean \(\Delta\) strat\_B \\
+\midrule
+0   & \(\approx -0.15\) \\
+500 & \(\approx -0.65\) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Anchor budget: large drift reduction at small integration cost}
+
+Increasing the anchor weight suppresses drift of replay latents away from
+their frozen base positions, at a small cost in integration
+(Table~\ref{tab:anchor-abl}). Going from
+\(\lambda_{\text{anchor}}=20\) to \(\lambda_{\text{anchor}}=100\)
+reduces held-out anchor drift by a factor of \(2.4\)
+(\(0.121 \to 0.050\)) while the held-out B improvement changes by only
+about \(3\%\) (\(-0.623 \to -0.601\)). The anchor is therefore close to
+free in this regime: it buys a substantially tighter geometric
+constraint on the adapted latent without materially sacrificing
+alignment.
+
+\begin{table}[H]
+\centering
+\caption{Anchor ablation at epoch~10, split\_seed~0. Raising
+\(\lambda_{\text{anchor}}\) reduces drift of replay latents with only a
+marginal change in held-out B alignment.}
+\label{tab:anchor-abl}
+\begin{tabular}{lcc}
+\toprule
+\(\lambda_{\text{anchor}}\) & anchor\_held\_out & \(\Delta\) strat\_B \\
+\midrule
+5   & 0.178 & \(-0.630\) \\
+20  & 0.121 & \(-0.623\) \\
+50  & 0.077 & \(-0.614\) \\
+100 & \(\mathbf{0.050}\) & \(\mathbf{-0.601}\) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Training length: plateau at epoch 20}
+
+With \(\lambda_{\text{anchor}}=100\) and
+\(\lambda_{\text{MMD}}=500\), the held-out B improvement grows through
+the first twenty epochs and then plateaus
+(Table~\ref{tab:temporal}). The optimum in this configuration is
+epoch~20 (\(-0.635\)); epochs~30--50 show a slow, mild drift back toward
+the base model, consistent with the adapter beginning to overfit the
+healthy~A cells that supply the ELBO. Selecting epoch~20 rather than
+epoch~10 or epoch~50 is therefore not an arbitrary choice but follows
+from the plateau.
+
+\begin{table}[H]
+\centering
+\caption{Temporal profile of held-out B alignment,
+\(\lambda_{\text{anchor}}=100\), \(\lambda_{\text{MMD}}=500\). Improvement
+peaks at epoch~20 and plateaus thereafter.}
+\label{tab:temporal}
+\begin{tabular}{lc}
+\toprule
+Epoch & \(\Delta\) strat\_B \\
+\midrule
+2  & \(-0.312\) \\
+5  & \(-0.495\) \\
+10 & \(-0.601\) \\
+20 & \(\mathbf{-0.635}\) \\
+30 & \(-0.630\) \\
+40 & \(-0.611\) \\
+50 & \(-0.602\) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Hold-out ratio}
+
+Changing the fraction of healthy donors assigned to held-out group~B
+leaves the effect stable (Table~\ref{tab:ratio}). With \(40\%\) of donors
+held out, the mean \(\Delta\) over three seeds is approximately
+\(-0.62\); with \(60\%\), approximately \(-0.67\). The larger hold-out
+gives a slightly larger effect, which is expected if more of the healthy
+variation is unseen by MMD and therefore tests the anchor and ELBO more
+strictly. We flag that the two rows come from different experiment
+families (\texttt{repeat\_splits} for \(40\%\),
+\texttt{ratio\_ablation\_ifn18} for \(60\%\)); a unified re-run is
+straightforward if a single table is preferred.
+
+\begin{table}[H]
+\centering
+\caption{Sensitivity to the fraction of healthy donors held out as
+group~B. Both settings yield a stable negative \(\Delta\); the \(40\%\)
+and \(60\%\) rows originate from different experiment families (see
+text).}
+\label{tab:ratio}
+\begin{tabular}{lcc}
+\toprule
+Held-out fraction & Mean \(\Delta\) & Seeds \\
+\midrule
+40\% & \(\approx -0.62\) & 3 \\
+60\% & \(\approx -0.67\) & 3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{MMD activation threshold}
+
+Sweeping \(\lambda_{\text{MMD}}\) at fixed
+\(\lambda_{\text{anchor}}=20\), split~0, epoch~10 reveals a threshold
+behavior (Table~\ref{tab:mmd-sweep}). At
+\(\lambda_{\text{MMD}}\le 20\), the model does not improve held-out B and
+in fact makes it slightly worse than the frozen base
+(\(\Delta = +0.090\) at \(\lambda_{\text{MMD}}=0\)). Alignment becomes
+beneficial at \(\lambda_{\text{MMD}}\approx 50\)--\(100\), and the effect
+grows monotonically up to the largest value tested
+(\(\lambda_{\text{MMD}}=1000\), \(\Delta = -0.721\)). Drift of the
+replay latents grows with \(\lambda_{\text{MMD}}\), from \(3.59\) at
+\(\lambda_{\text{MMD}}=5\) to \(4.90\) at \(\lambda_{\text{MMD}}=1000\);
+this is the trade-off that the anchor term (Section~\ref{sec:methods})
+is designed to control, and it is why the final configuration pairs a
+large \(\lambda_{\text{anchor}}\) with a large
+\(\lambda_{\text{MMD}}\).
+
+\begin{table}[H]
+\centering
+\caption{\(\lambda_{\text{MMD}}\) sweep at \(\lambda_{\text{anchor}}=20\),
+split~0, epoch~10. MMD has a threshold near
+\(\lambda_{\text{MMD}}\approx 50\)--\(100\); below it, held-out B is not
+improved. Drift grows with \(\lambda_{\text{MMD}}\).}
+\label{tab:mmd-sweep}
+\begin{tabular}{lcc}
+\toprule
+\(\lambda_{\text{MMD}}\) & \(\Delta\) strat\_B & drift\_max \\
+\midrule
+0    & \(+0.090\) & 3.60 \\
+5    & \(+0.055\) & 3.59 \\
+20   & \(-0.026\) & 3.59 \\
+100  & \(-0.282\) & 3.70 \\
+500  & \(-0.623\) & 4.38 \\
+1000 & \(\mathbf{-0.721}\) & 4.90 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Controls: IFN-18 signature and scIB}
+
+Two auxiliary readouts behave as expected and are reported here for
+completeness rather than as selection criteria.
+
+\textbf{IFN-18 signature.} The post-hoc Spearman correlation between the
+disease IFN-18 signature and the latent representation is approximately
+\(0.90\) across all \(\lambda_{\text{MMD}}\), including
+\(\lambda_{\text{MMD}}=0\). The signature therefore does not distinguish
+between alignment regimes. This is consistent with the design: the
+signature is a positive control on the disease side, not a criterion for
+choosing the healthy-alignment hyperparameters, and it is computed from
+a transcriptome-wide signature cache that is independent of the 3000-gene
+panel used for training.
+
+\textbf{scIB.} The batch ASW computed against donor identity is
+\texttt{NaN} in all runs, because no technical batch column was supplied
+to scIB. This is a deliberate design decision: in this cohort,
+\texttt{donor\_id} is treated as biological, not technical, variation,
+and donor structure is part of what the method is meant to preserve.
+The role of the batch-ASW diagnostic is partially covered by the
+block ASW (\(0.86\)--\(0.92\)) and by \texttt{anchor\_held\_out} reported
+above. The stratum ASW moves from \(0.4748\) in the base model to
+approximately \(0.478\) at epoch~10: a small but consistent increase,
+i.e.\ the adapter does not degrade cell-type structure and slightly
+sharpens it.
+
+\section{Methods}
+\label{sec:methods}
+
+We adapt a frozen scVI reference model by updating a single
+expression-facing linear layer under three disjoint objectives
+(Figure~\ref{fig:architecture}). Cell populations are partitioned so
+that disease cells never enter any gradient term
+(Table~\ref{tab:roles}).
+
+As the frozen reference model we use a scVI model trained on the CZ
+CELLxGENE Census, which provides standardized programmatic access to
+millions of annotated human cells and is widely used as a reference for
+single-cell integration~\cite{cellxgene_census_2023}. The model was
+trained on non-spatial human RNA sequencing data, with cells and genes
+filtered based on metadata and highly variable genes selected stratified
+by batch variables. We use the model as a frozen encoder: all weights,
+including the decoder and the remaining encoder layers, remain at their
+saved values.
+
+
+\begin{table}[H]
+\centering
+\caption{Gradient roles in phase~I. Disease cells are present in the query
+artifact but never enter any gradient term. ``Replay'' and ``metric
+reference'' are disjoint subsets of the same frozen healthy reference bank.}
+\label{tab:roles}
+\begin{tabular}{lcccc}
+\toprule
+Cell population & ELBO & Anchor & MMD & Gradients \\
+\midrule
+Reference replay              & no  & yes & no     & adapter only \\
+Reference metric bank         & no  & no  & target & none \\
+Query healthy A               & yes & no  & source & adapter only \\
+Query healthy B (held-out)    & yes & no  & no     & adapter only \\
+Query disease                 & no  & no  & no     & none \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Reference Mapping and Transfer Learning}
+
+Reference mapping aims to project a new query cohort onto an existing reference atlas so that both share a common latent coordinate system. scArches implements this via architectural surgery: it freezes the reference model and adds a small number of batch-specific adaptor weights, training only those parameters on the query data~\cite{scarches_2022}. By construction, the reference latent coordinates are left unchanged. What scArches does not provide is an explicit term constraining the \emph{adapted query} geometry to remain consistent with the reference; adaptation is driven by the reconstruction objective and whatever regularization the adaptor architecture implicitly imposes.
+
+scGRIP shares scArches' frozen-reference setting but differs in what is constrained. We do not add adaptor capacity. Instead, we update a single expression-facing linear layer under an explicit geometric anchor and a stratified MMD alignment term. The anchor penalizes drift of replay latents away from their frozen base positions, while MMD pulls healthy query cells toward an independent reference bank. Both terms act on the latent space \(z\), not on the decoder.
+
+\subsection{trVAE: MMD for Condition Transfer}
+
+trVAE is a conditional VAE that applies an additional MMD loss to improve merging in the latent space~\cite{trvae_2020,scarches_trvae}. However, the two methods use MMD for fundamentally different purposes, and the distinction is architectural.
+
+In trVAE, MMD is imposed on the \emph{first decoder layer} \(y = g_1(z, s)\), not on the latent space \(z\)~\cite{trvae_2020}. The motivation is explicit: a standard CVAE may already produce a latent representation \(z\) that is approximately independent of the condition \(s\), because \(s\) is fed directly to the decoder and there is little incentive for the encoder to retain condition information~\cite{trvae_arxiv}. The problem trVAE addresses is that the \emph{decoder's} first layer \(y\) nevertheless varies strongly across conditions, producing non-compact representations that hurt out-of-sample generation. MMD on \(y\) forces these condition-specific representations into overlapping regions of support, enabling the model to learn features shared across conditions and to transform unpaired samples from one condition to another~\cite{trvae_arxiv,trvae_bioinformatics}.
+
+The task trVAE solves is therefore \emph{condition transfer}: given a sample from condition \(s=0\), predict its counterpart under \(s=1\) (e.g., healthy \(\to\) infected, control \(\to\) treated). Disease or perturbation conditions are \emph{conditions like any other} and participate in training. The MMD term does not distinguish healthy from disease; it regularizes across all conditions to improve cross-condition prediction.
+
+scGRIP uses MMD for a different task and at a different location. The task is \emph{reference alignment}, not condition transfer: we want healthy query cells to occupy a latent region consistent with the reference bank, while disease cells remain unconstrained by the alignment. MMD is imposed on the latent space \(z\), not on the decoder. More importantly, it is applied \emph{only} between healthy query cells (group A) and the reference metric bank. Disease cells are present in the query artifact but never enter any gradient term, as enforced by an assertion in the training code and recorded in the run manifest. There is no mechanism in trVAE that would enforce this separation, because the separation itself is not trVAE's objective.
+
+A further distinction concerns stratification. trVAE's MMD regularization, as implemented, is computed globally or over a chosen boundary of conditions~\cite{scarches_trvae}. scGRIP computes MMD \emph{stratified by cell type}: the kernel alignment is performed within matched strata (e.g., CM CD4, EM CD4) with balanced per-stratum weighting. This choice follows from the goal: we want alignment that respects the reference's cell-type structure, not a global mixing that could conflate distinct populations.
+
+\subsection{MapQC: Evaluation, Not Construction}
+
+MapQC is a metric for evaluating the quality of a query-to-reference mapping~\cite{mapqc_preprint}. It assumes that a healthy reference captures most healthy variation, and that disease is transcriptionally distinct from healthy for at least some cell types. Given a mapping embedding and per-cell metadata, MapQC computes a per-cell score quantifying how far each query cell (or sample) lies from the reference relative to the expected inter-sample distances within the reference itself. Query controls are expected to have low scores; query cases with disease-specific phenotypes are expected to have higher scores.
+
+MapQC operates \emph{after} a mapping has been produced. It does not modify the mapping, does not train a model, and does not use disease labels during any construction step. scGRIP is built on the same two assumptions about what a correct latent space looks like: that healthy reference variation is well-covered, and that disease is distinct. The difference is that scGRIP \emph{constructs} the mapping under those assumptions, through an explicit anchor and healthy-only MMD, while MapQC \emph{evaluates} whether a given mapping satisfies them. The relationship is complementary: MapQC could in principle be used to assess scGRIP outputs, and the assumptions we rely on are those that MapQC formalizes.
+
+\begin{thebibliography}{9}
+
+\bibitem{cellxgene_census_2023}
+CZ CELLxGENE Census.
+\newblock \emph{CZ CELLxGENE Discover: a single-cell data platform for
+scalable exploration of public data}.
+\newblock 2023.
+
+\bibitem{scarches_2022}
+M.~Lotfollahi, M.~Nagi, M.~Bavafa, et al.
+\newblock Mapping single-cell data to reference atlases by transfer
+learning.
+\newblock \emph{Nature Biotechnology}, 40:121--130, 2022.
+
+\bibitem{scvi_2018}
+R.~Lopez, J.~Regier, M.~B. Cole, M.~I. Jordan, N.~Yosef.
+\newblock Deep generative modeling for single-cell transcriptomics.
+\newblock \emph{Nature Methods}, 15:1053--1058, 2018.
+
+\bibitem{mapqc_2025}
+MapQC.
+\newblock \emph{MapQC: a quantitative framework for evaluating reference
+mapping of single-cell data}.
+\newblock 2025.
+
+\bibitem{trvae_2020}
+M.~Lotfollahi, M.~Nagi, M.~Bavafa, et al.
+\newblock Conditional out-of-distribution generation for unpaired data using transfer VAE.
+\newblock \emph{Bioinformatics}, 36(2):i610--i617, 2020.
+
+\bibitem{trvae_arxiv}
+M.~Lotfollahi, M.~Nagi, M.~Bavafa, et al.
+\newblock Conditional out-of-sample generation for unpaired data using trVAE.
+\newblock \emph{arXiv:1910.01791}, 2019.
+
+\bibitem{trvae_bioinformatics}
+M.~Lotfollahi, et al.
+\newblock trVAE: transfer VAE for single-cell data.
+\newblock \emph{Bioinformatics}, 2020.
+
+\bibitem{scarches_trvae}
+scArches documentation.
+\newblock trVAE model description.
+\newblock https://docs.scarches.org/en/stable/about.html
+
+\bibitem{mapqc_preprint}
+L.~Sikkema, et al.
+\newblock Automated evaluation of single-cell reference atlas mappings enables the identification of disease-associated cell states.
+\newblock \emph{bioRxiv}, 2025.
+
+\end{thebibliography}
 
 \end{document}
